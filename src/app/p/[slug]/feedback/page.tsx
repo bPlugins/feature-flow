@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import {
   ChevronUp,
   MessageSquare,
@@ -51,12 +52,27 @@ export default function PublicFeedbackPage() {
   const [formDesc, setFormDesc] = useState("");
   const [formCategory, setFormCategory] = useState("feature");
   const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [newComment, setNewComment] = useState("");
+  const [commentName, setCommentName] = useState("");
+  const [commentEmail, setCommentEmail] = useState("");
   const [upvotedIds, setUpvotedIds] = useState<Set<string>>(new Set());
+
+  // Restore saved user info from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("featureflow-user");
+    if (saved) {
+      try {
+        const { name, email } = JSON.parse(saved);
+        if (name) { setFormName(name); setCommentName(name); }
+        if (email) { setFormEmail(email); setCommentEmail(email); }
+      } catch { /* ignore */ }
+    }
+  }, []);
 
   const fetchFeedbacks = useCallback(async () => {
     setLoading(true);
@@ -114,7 +130,10 @@ export default function PublicFeedbackPage() {
   };
 
   const submitFeedback = async () => {
-    if (!formTitle || !formDesc) return;
+    if (!formTitle || !formDesc || !formName || !formEmail) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/projects/${slug}/feedback`, {
@@ -124,16 +143,30 @@ export default function PublicFeedbackPage() {
           title: formTitle,
           description: formDesc,
           category: formCategory,
-          authorName: formName || "Anonymous",
+          authorName: formName,
+          authorEmail: formEmail,
         }),
       });
+      const data = await res.json();
       if (res.ok) {
         toast.success("Feedback submitted! Thank you 🎉");
+        // Save user info for future submissions
+        localStorage.setItem("featureflow-user", JSON.stringify({ name: formName, email: formEmail }));
         setShowForm(false);
         setFormTitle("");
         setFormDesc("");
-        setFormName("");
         fetchFeedbacks();
+
+        // Auto sign-in the created customer account
+        if (data.autoSignIn && data.customerEmail) {
+          // Silently sign in - this sets the session cookie
+          await signIn("credentials", {
+            email: data.customerEmail,
+            redirect: false,
+          }).catch(() => { /* silent fail is ok */ });
+        }
+      } else {
+        toast.error(data.error || "Failed to submit");
       }
     } catch {
       toast.error("Failed to submit");
@@ -143,16 +176,26 @@ export default function PublicFeedbackPage() {
   };
 
   const submitComment = async () => {
-    if (!newComment || !selectedId) return;
+    if (!newComment || !selectedId || !commentName || !commentEmail) {
+      toast.error("Please enter your name, email, and comment");
+      return;
+    }
     try {
       const res = await fetch(`/api/feedback/${selectedId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newComment }),
+        body: JSON.stringify({
+          content: newComment,
+          authorName: commentName,
+          authorEmail: commentEmail,
+        }),
       });
       if (res.ok) {
+        // Save user info for future use
+        localStorage.setItem("featureflow-user", JSON.stringify({ name: commentName, email: commentEmail }));
         setNewComment("");
         fetchComments(selectedId);
+        toast.success("Comment posted!");
       }
     } catch {
       toast.error("Failed to post comment");
@@ -357,23 +400,41 @@ export default function PublicFeedbackPage() {
                   </div>
                 )}
 
-                {/* Add comment */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && submitComment()}
-                    placeholder="Add a comment..."
-                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                  <button
-                    onClick={submitComment}
-                    disabled={!newComment}
-                    className="px-3 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-40"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
+                {/* Add comment - with name and email */}
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={commentName}
+                      onChange={(e) => setCommentName(e.target.value)}
+                      placeholder="Your name *"
+                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <input
+                      type="email"
+                      value={commentEmail}
+                      onChange={(e) => setCommentEmail(e.target.value)}
+                      placeholder="Your email *"
+                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && submitComment()}
+                      placeholder="Add a comment..."
+                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <button
+                      onClick={submitComment}
+                      disabled={!newComment || !commentName || !commentEmail}
+                      className="px-3 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-40"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -392,18 +453,30 @@ export default function PublicFeedbackPage() {
               </button>
             </div>
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Your name (optional)</label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Anonymous"
-                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Your name <span className="text-danger">*</span></label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Jane Doe"
+                    className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Email <span className="text-danger">*</span></label>
+                  <input
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="jane@example.com"
+                    className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Title *</label>
+                <label className="block text-sm font-medium mb-1.5">Title <span className="text-danger">*</span></label>
                 <input
                   type="text"
                   value={formTitle}
@@ -426,7 +499,7 @@ export default function PublicFeedbackPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Description *</label>
+                <label className="block text-sm font-medium mb-1.5">Description <span className="text-danger">*</span></label>
                 <textarea
                   value={formDesc}
                   onChange={(e) => setFormDesc(e.target.value)}
@@ -435,6 +508,9 @@ export default function PublicFeedbackPage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
                 />
               </div>
+              <p className="text-xs text-muted-foreground">
+                An account will be created automatically so you can track your feedback.
+              </p>
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-border">
               <button
@@ -445,7 +521,7 @@ export default function PublicFeedbackPage() {
               </button>
               <button
                 onClick={submitFeedback}
-                disabled={submitting || !formTitle || !formDesc}
+                disabled={submitting || !formTitle || !formDesc || !formName || !formEmail}
                 className="px-5 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center gap-2"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

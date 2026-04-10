@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { NextRequest } from "next/server";
+import { hash } from "bcryptjs";
 
 export async function GET(
   request: NextRequest,
@@ -73,6 +74,43 @@ export async function POST(
     );
   }
 
+  // Name and email are required for non-logged-in users
+  if (!session?.user?.id && (!authorName || !authorEmail)) {
+    return Response.json(
+      { error: "Name and email are required" },
+      { status: 400 }
+    );
+  }
+
+  let userId = session?.user?.id || null;
+  let customerToken: string | null = null;
+
+  // Auto-create customer account if not logged in
+  if (!userId && authorEmail) {
+    let existingUser = await prisma.user.findUnique({
+      where: { email: authorEmail },
+    });
+
+    if (!existingUser) {
+      // Create a customer account with a random password (they can reset later)
+      const randomPassword = Math.random().toString(36).slice(-12) + "Aa1!";
+      const hashedPassword = await hash(randomPassword, 12);
+
+      existingUser = await prisma.user.create({
+        data: {
+          email: authorEmail,
+          name: authorName,
+          password: hashedPassword,
+          role: "customer",
+        },
+      });
+    }
+
+    userId = existingUser.id;
+    // Return a flag so the frontend can auto-sign-in this user
+    customerToken = existingUser.email;
+  }
+
   const boardId = boardSlug
     ? project.boards.find((b) => b.slug === boardSlug)?.id
     : project.boards[0]?.id;
@@ -83,10 +121,10 @@ export async function POST(
       description,
       category,
       projectId: project.id,
-      authorId: session?.user?.id || null,
+      authorId: userId,
       boardId: boardId || null,
-      authorName: session?.user?.name || authorName || "Anonymous",
-      authorEmail: (session?.user as { email?: string })?.email || authorEmail || null,
+      authorName: authorName || session?.user?.name || "Anonymous",
+      authorEmail: authorEmail || (session?.user as { email?: string })?.email || null,
     },
     include: {
       author: { select: { id: true, name: true, avatarUrl: true } },
@@ -94,5 +132,9 @@ export async function POST(
     },
   });
 
-  return Response.json({ feedback }, { status: 201 });
+  return Response.json({
+    feedback,
+    autoSignIn: customerToken ? true : false,
+    customerEmail: customerToken,
+  }, { status: 201 });
 }

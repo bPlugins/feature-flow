@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { isSuperAdmin } from "@/lib/superadmin";
 import Link from "next/link";
 import {
   MessageSquare,
@@ -10,15 +11,19 @@ import {
   ArrowRight,
   Plus,
   FolderOpen,
+  Shield,
 } from "lucide-react";
 
 export default async function DashboardPage() {
   const session = await auth();
   const userId = session?.user?.id;
+  const isAdmin = isSuperAdmin(session?.user?.email);
 
+  // Super admin sees ALL projects; regular user sees only their own
   const projects = await prisma.project.findMany({
-    where: { ownerId: userId! },
+    where: isAdmin ? {} : { ownerId: userId! },
     include: {
+      owner: { select: { id: true, name: true, email: true } },
       _count: {
         select: {
           feedbacks: true,
@@ -46,20 +51,44 @@ export default async function DashboardPage() {
   const totalRoadmap = projects.reduce((sum, p) => sum + p._count.roadmapItems, 0);
   const totalChangelogs = projects.reduce((sum, p) => sum + p._count.changelogs, 0);
 
+  // Super admin extra stats
+  let totalUsers = 0;
+  if (isAdmin) {
+    totalUsers = await prisma.user.count();
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Greeting */}
       <div>
-        <h1 className="text-3xl font-bold mb-1">
+        <h1 className="text-3xl font-bold mb-1 flex items-center gap-3">
           Welcome back, {session?.user?.name?.split(" ")[0]} 👋
+          {isAdmin && (
+            <span className="px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 text-xs font-bold flex items-center gap-1">
+              <Shield className="w-3.5 h-3.5" />
+              Super Admin
+            </span>
+          )}
         </h1>
         <p className="text-muted-foreground">
-          Here&apos;s what&apos;s happening across your projects.
+          {isAdmin
+            ? "You're viewing all platform data as Super Admin."
+            : "Here's what's happening across your projects."}
         </p>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+      <div className={`grid grid-cols-2 ${isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"} gap-4 stagger-children`}>
+        {isAdmin && (
+          <div className="p-5 rounded-2xl border border-red-500/20 bg-surface hover:shadow-lg hover:shadow-black/5 transition-all duration-300">
+            <div className="flex items-center justify-between mb-3">
+              <Shield className="w-5 h-5 text-red-500" />
+              <TrendingUp className="w-4 h-4 text-success" />
+            </div>
+            <p className="text-2xl font-bold">{totalUsers}</p>
+            <p className="text-sm text-muted-foreground">Total Users</p>
+          </div>
+        )}
         {[
           { label: "Projects", value: projects.length, icon: FolderOpen, color: "text-primary" },
           { label: "Total Feedback", value: totalFeedback, icon: MessageSquare, color: "text-blue-500" },
@@ -83,7 +112,9 @@ export default async function DashboardPage() {
       {/* Projects */}
       <div>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-xl font-bold">Your Projects</h2>
+          <h2 className="text-xl font-bold">
+            {isAdmin ? "All Projects" : "Your Projects"}
+          </h2>
           <Link
             href="/dashboard/new-project"
             className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary-hover transition-colors"
@@ -126,11 +157,21 @@ export default async function DashboardPage() {
                       /{project.slug}
                     </p>
                   </div>
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: project.primaryColor }}
-                  />
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: project.primaryColor }}
+                    />
+                  </div>
                 </div>
+
+                {/* Show owner for super admin */}
+                {isAdmin && (
+                  <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1">
+                    <span className="font-medium">Owner:</span>{" "}
+                    {project.owner.name || project.owner.email}
+                  </p>
+                )}
 
                 {project.description && (
                   <p className="text-sm text-muted-foreground mb-4 line-clamp-2">

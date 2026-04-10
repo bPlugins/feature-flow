@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MessageSquare, Map, FileText, Zap } from "lucide-react";
+import PublicHeaderActions from "@/components/PublicHeaderActions";
 
 export default async function PublicProjectLayout({
   children,
@@ -39,18 +40,21 @@ export default async function PublicProjectLayout({
             </div>
             <span className="text-lg font-bold">{project.name}</span>
           </div>
-          <nav className="flex items-center gap-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-              >
-                <item.icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{item.label}</span>
-              </Link>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2">
+            <nav className="flex items-center gap-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{item.label}</span>
+                </Link>
+              ))}
+            </nav>
+            <PublicHeaderActions />
+          </div>
         </div>
       </header>
 

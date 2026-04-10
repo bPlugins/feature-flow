@@ -27,6 +27,11 @@ export default function NewProjectPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.requiresUpgrade) {
+          toast.error(data.error, { duration: 5000 });
+          router.push("/dashboard/settings");
+          return;
+        }
         toast.error(data.error || "Failed to create project");
         return;
       }

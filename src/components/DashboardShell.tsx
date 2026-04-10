@@ -15,8 +15,12 @@ import {
   Menu,
   X,
   ChevronDown,
+  Shield,
 } from "lucide-react";
 import { useState } from "react";
+
+import ThemeToggle from "@/components/ThemeToggle";
+import { isSuperAdmin } from "@/lib/superadmin";
 
 interface DashboardShellProps {
   user: {
@@ -39,6 +43,16 @@ export default function DashboardShell({ user, children }: DashboardShellProps) 
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  const isAdmin = isSuperAdmin(user.email);
+
+  // Build nav items dynamically
+  const allNavItems = [
+    ...navItems,
+    ...(isAdmin
+      ? [{ href: "/dashboard/admin", icon: Shield, label: "Admin" }]
+      : []),
+  ];
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -88,10 +102,11 @@ export default function DashboardShell({ user, children }: DashboardShellProps) 
 
         {/* Nav items */}
         <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {allNavItems.map((item) => {
             const isActive = item.href === "/dashboard"
               ? pathname === "/dashboard"
               : pathname.startsWith(item.href);
+            const isAdminItem = item.href === "/dashboard/admin";
             return (
               <Link
                 key={item.href}
@@ -102,13 +117,22 @@ export default function DashboardShell({ user, children }: DashboardShellProps) 
                   transition-all duration-200
                   ${
                     isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      ? isAdminItem
+                        ? "bg-red-500/10 text-red-500"
+                        : "bg-primary/10 text-primary"
+                      : isAdminItem
+                        ? "text-red-400/70 hover:text-red-500 hover:bg-red-500/5"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   }
                 `}
               >
                 <item.icon className="w-4.5 h-4.5" />
                 {item.label}
+                {isAdminItem && (
+                  <span className="ml-auto px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-500 text-[9px] font-bold">
+                    SA
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -133,6 +157,12 @@ export default function DashboardShell({ user, children }: DashboardShellProps) 
 
             {userMenuOpen && (
               <div className="absolute bottom-full left-0 right-0 mb-2 p-1.5 bg-surface border border-border rounded-xl shadow-xl animate-scale-in">
+                {isAdmin && (
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-red-500 uppercase tracking-wider flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    Super Admin
+                  </div>
+                )}
                 <button
                   onClick={() => signOut({ callbackUrl: "/" })}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-danger hover:bg-danger/10 rounded-lg transition-colors"
@@ -157,6 +187,13 @@ export default function DashboardShell({ user, children }: DashboardShellProps) 
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex-1" />
+          {isAdmin && (
+            <span className="mr-3 px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 text-[10px] font-bold flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              Super Admin
+            </span>
+          )}
+          <ThemeToggle />
         </header>
 
         {/* Page content */}

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { NextRequest } from "next/server";
+import { hash } from "bcryptjs";
 
 export async function GET(
   _request: NextRequest,
@@ -36,10 +37,43 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { content, authorName } = body;
+  const { content, authorName, authorEmail } = body;
 
   if (!content) {
     return Response.json({ error: "Content is required" }, { status: 400 });
+  }
+
+  // Require name and email for non-authenticated users
+  if (!session?.user?.id && (!authorName || !authorEmail)) {
+    return Response.json(
+      { error: "Name and email are required" },
+      { status: 400 }
+    );
+  }
+
+  let userId = session?.user?.id || null;
+
+  // Auto-create/find customer account if not logged in
+  if (!userId && authorEmail) {
+    let existingUser = await prisma.user.findUnique({
+      where: { email: authorEmail },
+    });
+
+    if (!existingUser) {
+      const randomPassword = Math.random().toString(36).slice(-12) + "Aa1!";
+      const hashedPassword = await hash(randomPassword, 12);
+
+      existingUser = await prisma.user.create({
+        data: {
+          email: authorEmail,
+          name: authorName,
+          password: hashedPassword,
+          role: "customer",
+        },
+      });
+    }
+
+    userId = existingUser.id;
   }
 
   const isOfficial = session?.user?.id === feedback.project.ownerId;
@@ -48,9 +82,9 @@ export async function POST(
     data: {
       content,
       feedbackId: id,
-      authorId: session?.user?.id || null,
+      authorId: userId,
       isOfficial,
-      authorName: session?.user?.name || authorName || "Anonymous",
+      authorName: authorName || session?.user?.name || "Anonymous",
     },
     include: {
       author: { select: { id: true, name: true, avatarUrl: true } },
