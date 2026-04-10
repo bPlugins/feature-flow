@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       if (userId && plan) {
         const subscription = await stripe.subscriptions.retrieve(
           session.subscription as string
-        );
+        ) as any;
 
         await prisma.subscription.upsert({
           where: { userId },
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     case "customer.subscription.updated": {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object as any;
       const sub = await prisma.subscription.findFirst({
         where: { stripeSubscriptionId: subscription.id },
       });
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     case "customer.subscription.deleted": {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object as any;
       const sub = await prisma.subscription.findFirst({
         where: { stripeSubscriptionId: subscription.id },
       });

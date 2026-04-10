@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Copy, Check, ExternalLink, Code2, Globe, Palette, CreditCard, Crown, Sparkles, ArrowUpRight } from "lucide-react";
+import { Loader2, Copy, Check, ExternalLink, Code2, Globe, Palette, Image as ImageIcon, Link as LinkIcon, Box, Code } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
 import toast from "react-hot-toast";
-import { PLAN_LIMITS, type PlanType } from "@/lib/plans";
+import { useSession } from "next-auth/react";
+import { isSuperAdmin } from "@/lib/superadmin";
 
 interface Project {
   id: string;
@@ -14,6 +15,10 @@ interface Project {
   websiteUrl: string | null;
   primaryColor: string;
   isPublic: boolean;
+  logoUrl: string | null;
+  customDomain: string | null;
+  customCss: string | null;
+
 }
 
 type PageType = "feedback" | "roadmap" | "changelog";
@@ -27,27 +32,46 @@ const PRESET_COLORS = [
 ];
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState("");
   const [embedPage, setEmbedPage] = useState<PageType>("feedback");
   const [savingColor, setSavingColor] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState<PlanType>("free");
-  const [billingLoading, setBillingLoading] = useState(false);
+  const [savingAdvanced, setSavingAdvanced] = useState(false);
+
+  const [logoUrl, setLogoUrl] = useState("");
+  const [customDomain, setCustomDomain] = useState("");
+
+  const [customCss, setCustomCss] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/projects").then((r) => r.json()),
-      fetch("/api/billing").then((r) => r.json()).catch(() => ({ plan: "free" })),
-    ]).then(([projectsData, billingData]) => {
-      const projs = projectsData.projects || [];
-      setProjects(projs);
-      if (projs.length > 0) setSelected(projs[0]);
-      setCurrentPlan((billingData.plan || "free") as PlanType);
-      setLoading(false);
-    });
+    fetch("/api/projects")
+      .then((r) => r.json())
+      .then((data) => {
+        const projs = data.projects || [];
+        setProjects(projs);
+        if (projs.length > 0) {
+          const first = projs[0];
+          setSelected(first);
+          setLogoUrl(first.logoUrl || "");
+          setCustomDomain(first.customDomain || "");
+          setCustomCss(first.customCss || "");
+        }
+        setLoading(false);
+      });
   }, []);
+
+  const changeSelected = (slug: string) => {
+    const proj = projects.find((p) => p.slug === slug);
+    if (proj) {
+      setSelected(proj);
+      setLogoUrl(proj.logoUrl || "");
+      setCustomDomain(proj.customDomain || "");
+      setCustomCss(proj.customCss || "");
+    }
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -79,24 +103,34 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpgrade = async (plan: string) => {
-    setBillingLoading(true);
+  const saveAdvancedSettings = async () => {
+    if (!selected) return;
+    setSavingAdvanced(true);
     try {
-      const res = await fetch("/api/billing", {
-        method: "POST",
+      const res = await fetch(`/api/projects/${selected.slug}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({
+          logoUrl: logoUrl || null,
+          customDomain: customDomain || null,
+          customCss: customCss || null,
+        }),
       });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
+      if (res.ok) {
+        const updated = await res.json();
+        setSelected(updated.project);
+        setProjects((prev) =>
+          prev.map((p) => (p.slug === selected.slug ? updated.project : p))
+        );
+        toast.success("Settings saved successfully!");
       } else {
-        toast.error(data.error || "Failed to start checkout");
+        const data = await res.json();
+        toast.error(data.error || "Failed to save settings");
       }
     } catch {
-      toast.error("Failed to start checkout");
+      toast.error("An error occurred. Try again.");
     } finally {
-      setBillingLoading(false);
+      setSavingAdvanced(false);
     }
   };
 
@@ -132,26 +166,7 @@ export default function SettingsPage() {
     changelog: "Changelog",
   };
 
-  const plans = [
-    {
-      key: "free" as const,
-      icon: Sparkles,
-      gradient: "from-slate-500 to-slate-600",
-      features: ["1 project", "100 feedbacks", "10 roadmap items", "10 changelog entries"],
-    },
-    {
-      key: "pro" as const,
-      icon: Crown,
-      gradient: "from-primary to-secondary",
-      features: ["5 projects", "1,000 feedbacks/project", "100 roadmap items", "100 changelog", "Priority support"],
-    },
-    {
-      key: "team" as const,
-      icon: CreditCard,
-      gradient: "from-amber-500 to-orange-500",
-      features: ["Unlimited projects", "Unlimited feedbacks", "Unlimited roadmap/changelog", "Custom branding", "API access"],
-    },
-  ];
+  const isOwnerOrSuper = (session?.user as any)?.role === "owner" || isSuperAdmin(session?.user?.email);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -164,96 +179,96 @@ export default function SettingsPage() {
       </div>
 
       {projects.length > 1 && (
-        <select
-          value={selected.slug}
-          onChange={(e) => setSelected(projects.find((p) => p.slug === e.target.value) || null)}
-          className="px-4 py-2 rounded-xl border border-border bg-surface text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50"
-        >
-          {projects.map((p) => (
-            <option key={p.slug} value={p.slug}>{p.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-surface">
+          <label htmlFor="projectSelect" className="text-sm font-medium">Select Project:</label>
+          <select
+            id="projectSelect"
+            value={selected.slug}
+            onChange={(e) => changeSelected(e.target.value)}
+            className="flex-1 px-4 py-2 rounded-lg border border-border bg-background text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >
+            {projects.map((p) => (
+              <option key={p.slug} value={p.slug}>{p.name}</option>
+            ))}
+          </select>
+        </div>
       )}
 
-      {/* ═══════ Billing & Plan ═══════ */}
-      <div className="p-6 rounded-2xl border border-border bg-surface">
-        <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-primary" />
-          Plan & Billing
-        </h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          Current plan: <span className="font-semibold text-foreground capitalize">{currentPlan}</span>
-          {currentPlan === "free" && " — Upgrade to unlock more features"}
-        </p>
-
-        <div className="grid md:grid-cols-3 gap-4">
-          {plans.map((plan) => {
-            const limits = PLAN_LIMITS[plan.key];
-            const isCurrent = currentPlan === plan.key;
-            return (
-              <div
-                key={plan.key}
-                className={`relative p-4 rounded-xl border-2 transition-all ${
-                  isCurrent
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/30"
-                }`}
-              >
-                {isCurrent && (
-                  <div className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold">
-                    CURRENT
-                  </div>
-                )}
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${plan.gradient} flex items-center justify-center mb-3`}>
-                  <plan.icon className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="font-bold capitalize">{plan.key}</h3>
-                <p className="text-2xl font-bold mb-3">
-                  ${limits.price}<span className="text-sm font-normal text-muted-foreground">/mo</span>
-                </p>
-                <ul className="space-y-1.5 mb-4">
-                  {plan.features.map((f) => (
-                    <li key={f} className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Check className="w-3 h-3 text-success shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                {!isCurrent && plan.key !== "free" && (
-                  <button
-                    onClick={() => handleUpgrade(plan.key)}
-                    disabled={billingLoading}
-                    className="w-full py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-all flex items-center justify-center gap-1.5"
-                  >
-                    {billingLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>Upgrade <ArrowUpRight className="w-3.5 h-3.5" /></>
-                    )}
-                  </button>
-                )}
-                {plan.key === "free" && !isCurrent && (
-                  <p className="text-xs text-center text-muted-foreground">Free tier</p>
-                )}
-              </div>
-            );
-          })}
+      {/* ═══════ Brand & Domain ═══════ */}
+      <div className="p-6 rounded-2xl border border-border bg-surface space-y-6">
+        <div>
+          <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
+            <Box className="w-5 h-5 text-primary" />
+            Brand & Domain
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Upload your logo and connect a custom domain.
+          </p>
         </div>
 
-        {!process.env.NEXT_PUBLIC_STRIPE_ENABLED && (
-          <p className="text-xs text-muted-foreground mt-4 p-3 rounded-lg bg-muted/50">
-            💡 To enable payments, set <code className="bg-muted px-1 rounded">STRIPE_SECRET_KEY</code>,{" "}
-            <code className="bg-muted px-1 rounded">STRIPE_PRO_PRICE_ID</code>, and{" "}
-            <code className="bg-muted px-1 rounded">STRIPE_TEAM_PRICE_ID</code> in your <code className="bg-muted px-1 rounded">.env</code> file.
-          </p>
-        )}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5 flex items-center gap-1.5">
+              <ImageIcon className="w-4 h-4 text-muted-foreground" /> Logo URL
+            </label>
+            <input
+              type="url"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://yourwebsite.com/logo.png"
+              className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1.5 flex items-center gap-1.5">
+              <LinkIcon className="w-4 h-4 text-muted-foreground" /> Custom Domain
+            </label>
+            <input
+              type="text"
+              value={customDomain}
+              onChange={(e) => setCustomDomain(e.target.value)}
+              placeholder="feedback.yourdomain.com"
+              className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Point a CNAME record to <code className="bg-muted px-1 rounded">cname.vercel-dns.com</code>.
+            </p>
+          </div>
+
+
+          {isOwnerOrSuper && (
+            <div>
+              <label className="block text-sm font-medium mb-1.5 flex items-center gap-1.5">
+                <Code className="w-4 h-4 text-muted-foreground" /> Custom CSS
+              </label>
+              <textarea
+                value={customCss}
+                onChange={(e) => setCustomCss(e.target.value)}
+                placeholder=":root { \n  --radius: 0px; \n}"
+                rows={4}
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y"
+              />
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={saveAdvancedSettings}
+              disabled={savingAdvanced}
+              className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-xl transition-all flex items-center gap-2"
+            >
+              {savingAdvanced && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save Changes
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ═══════ Theme Color ═══════ */}
       <div className="p-6 rounded-2xl border border-border bg-surface">
         <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
           <Palette className="w-5 h-5 text-pink-500" />
-          Project Theme
+          Project Accent Color
         </h2>
         <p className="text-sm text-muted-foreground mb-4">
           Customize the accent color for your public pages.
@@ -418,7 +433,7 @@ export default function SettingsPage() {
               <div>
                 <h3 className="text-sm font-semibold">Popup Widget (Floating Button)</h3>
                 <p className="text-xs text-muted-foreground">
-                  Adds a floating button that opens the {pageLabels[embedPage].toLowerCase()} in a popup.
+                  Adds a floating button that opens the {pageLabels[embedPage].toLowerCase()} in a popup overlay when clicked.
                 </p>
               </div>
             </div>
@@ -449,7 +464,7 @@ export default function SettingsPage() {
               <div>
                 <h3 className="text-sm font-semibold">Inline Widget (Script tag)</h3>
                 <p className="text-xs text-muted-foreground">
-                  Place the script anywhere and it renders inline.
+                  Place this script inside any div on your site and it renders seamlessly inline.
                 </p>
               </div>
             </div>
@@ -479,7 +494,7 @@ export default function SettingsPage() {
               <div>
                 <h3 className="text-sm font-semibold">Direct Link / Reverse Proxy</h3>
                 <p className="text-xs text-muted-foreground">
-                  Link directly or proxy from your own domain.
+                  Link directly from your nav, or proxy from your own domain (e.g., feedback.yourdomain.com).
                 </p>
               </div>
             </div>

@@ -51,7 +51,10 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { name, description, websiteUrl, primaryColor, isPublic } = body;
+  const { 
+    name, description, websiteUrl, primaryColor, isPublic,
+    logoUrl, customCss, customDomain, webhookUrl
+  } = body;
 
   const updated = await prisma.project.update({
     where: { slug },
@@ -61,6 +64,10 @@ export async function PATCH(
       ...(websiteUrl !== undefined && { websiteUrl }),
       ...(primaryColor && { primaryColor }),
       ...(isPublic !== undefined && { isPublic }),
+      ...(logoUrl !== undefined && { logoUrl }),
+      ...(customCss !== undefined && { customCss }),
+      ...(customDomain !== undefined && { customDomain }),
+      ...(webhookUrl !== undefined && { webhookUrl }),
     },
   });
 

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { NextRequest } from "next/server";
 import { hash } from "bcryptjs";
+import { fireWebhooks } from "@/lib/webhooks";
 
 export async function GET(
   request: NextRequest,
@@ -132,9 +133,24 @@ export async function POST(
     },
   });
 
+  // Fire webhooks for feedback.created event
+  fireWebhooks(project.id, "feedback.created", {
+    id: feedback.id,
+    title: feedback.title,
+    description: feedback.description,
+    status: feedback.status,
+    category: feedback.category,
+    authorName: feedback.authorName,
+    authorEmail: feedback.authorEmail,
+    projectSlug: slug,
+    projectName: project.name,
+    createdAt: feedback.createdAt,
+  });
+
   return Response.json({
     feedback,
     autoSignIn: customerToken ? true : false,
     customerEmail: customerToken,
   }, { status: 201 });
 }
+

@@ -21,6 +21,7 @@ import {
   Pencil,
   Check,
   X,
+  Download,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import toast from "react-hot-toast";
@@ -216,6 +217,39 @@ export default function AdminPage() {
     customer: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
   };
 
+  const exportToCsv = () => {
+    let dataToExport: any[] = [];
+    let headers: string[] = [];
+    let filename = "";
+
+    if (tab === "users" && users.length > 0) {
+      headers = ["ID", "Name", "Email", "Role", "Plan", "Projects", "Feedbacks", "Comments", "Joined"];
+      dataToExport = users.map(u => [
+        u.id, `"${(u.name || "").replace(/"/g, '""')}"`, u.email, u.role, u.plan,
+        u._count.projects, u._count.feedbacks, u._count.comments, u.createdAt
+      ]);
+      filename = "featureflow_users.csv";
+    } else if (tab === "projects" && projects.length > 0) {
+      headers = ["ID", "Name", "Slug", "Owner Email", "Feedbacks", "Roadmap", "Changelogs", "Is Public", "Created At"];
+      dataToExport = projects.map(p => [
+        p.id, `"${p.name.replace(/"/g, '""')}"`, p.slug, p.owner.email,
+        p._count.feedbacks, p._count.roadmapItems, p._count.changelogs, p.isPublic, p.createdAt
+      ]);
+      filename = "featureflow_projects.csv";
+    } else {
+      return;
+    }
+
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + dataToExport.map(r => r.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
     { key: "overview", label: "Overview", icon: BarChart3 },
     { key: "users", label: "Users", icon: Users },
@@ -253,17 +287,27 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* Search bar (for users and projects) */}
+      {/* Search bar & Export (for users and projects) */}
       {tab !== "overview" && (
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={tab === "users" ? "Search by name or email..." : "Search by name or slug..."}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-surface text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
+        <div className="flex items-center gap-3 max-w-xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={tab === "users" ? "Search by name or email..." : "Search by name or slug..."}
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-surface text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          <button
+            onClick={exportToCsv}
+            disabled={(tab === "users" && users.length === 0) || (tab === "projects" && projects.length === 0)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-surface text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
         </div>
       )}
 

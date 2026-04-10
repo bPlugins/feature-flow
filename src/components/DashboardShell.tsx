@@ -31,12 +31,16 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
+import { CreditCard, Webhook } from "lucide-react";
+
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
   { href: "/dashboard/feedback", icon: MessageSquare, label: "Feedback" },
   { href: "/dashboard/roadmap", icon: Map, label: "Roadmap" },
   { href: "/dashboard/changelog", icon: FileText, label: "Changelog" },
+  { href: "/dashboard/webhooks", icon: Webhook, label: "Webhooks" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
+  { href: "/dashboard/billing", icon: CreditCard, label: "Billing" },
 ];
 
 export default function DashboardShell({ user, children }: DashboardShellProps) {
@@ -48,7 +52,7 @@ export default function DashboardShell({ user, children }: DashboardShellProps) 
 
   // Build nav items dynamically
   const allNavItems = [
-    ...navItems,
+    ...navItems.filter(item => !(isAdmin && item.href === '/dashboard/billing')),
     ...(isAdmin
       ? [{ href: "/dashboard/admin", icon: Shield, label: "Admin" }]
       : []),

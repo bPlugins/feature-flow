@@ -47,6 +47,9 @@ model Project {
   description   String?
   logoUrl       String?
   websiteUrl    String?
+  customDomain  String?   @unique
+  customCss     String?
+  webhookUrl    String?
   primaryColor  String    @default("#6366f1")
   isPublic      Boolean   @default(true)
   createdAt     DateTime  @default(now())
@@ -57,6 +60,7 @@ model Project {
   feedbacks     Feedback[]
   roadmapItems  RoadmapItem[]
   changelogs    ChangelogEntry[]
+  webhooks      Webhook[]
 }
 
 model Board {
@@ -151,6 +155,22 @@ model ChangelogEntry {
   type          String    @default("feature") // feature, improvement, bugfix, breaking
   isPublished   Boolean   @default(false)
   publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Webhook {
+  id            String    @id @default(cuid())
+  projectId     String
+  name          String
+  url           String
+  method        String    @default("POST") // GET, POST, PUT, PATCH
+  headers       String?   // JSON string of key-value pairs
+  enabled       Boolean   @default(true)
+  content       String?   // JSON body template, supports {{variables}}
+  eventType     String    @default("feedback.created") // feedback.created, feedback.updated, comment.created, upvote.created
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

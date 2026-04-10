@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { MessageSquare, Filter, ChevronUp, Loader2, Search } from "lucide-react";
+import { MessageSquare, Filter, ChevronUp, Loader2, Search, Download } from "lucide-react";
 import StatusBadge, { CategoryBadge } from "@/components/StatusBadge";
 import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -98,6 +98,29 @@ export default function FeedbackPage() {
       fb.description.toLowerCase().includes(search.toLowerCase())
   );
 
+  const exportToCsv = () => {
+    if (!filteredFeedbacks.length) return;
+    const headers = ["ID", "Title", "Description", "Status", "Category", "Upvotes", "Author", "Created At"];
+    const rows = filteredFeedbacks.map(fb => [
+      fb.id,
+      `"${fb.title.replace(/"/g, '""')}"`,
+      `"${fb.description.replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+      fb.status,
+      fb.category,
+      fb.upvoteCount,
+      `"${(fb.author?.name || fb.authorName || "Anonymous").replace(/"/g, '""')}"`,
+      fb.createdAt
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(r => r.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `feedback_export_${selectedProject}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const statuses = ["open", "under_review", "planned", "in_progress", "completed", "closed"];
   const categories = ["feature", "bug", "improvement", "question"];
 
@@ -109,17 +132,28 @@ export default function FeedbackPage() {
           <p className="text-muted-foreground mt-1">Manage feedback from your customers</p>
         </div>
 
-        {projects.length > 1 && (
-          <select
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value)}
-            className="px-4 py-2 rounded-xl border border-border bg-surface text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50"
+        <div className="flex items-center gap-3">
+          <button
+            onClick={exportToCsv}
+            disabled={filteredFeedbacks.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-surface text-sm font-medium hover:bg-muted/50 disabled:opacity-50 transition-colors"
           >
-            {projects.map((p) => (
-              <option key={p.slug} value={p.slug}>{p.name}</option>
-            ))}
-          </select>
-        )}
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+          
+          {projects.length > 1 && (
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="px-4 py-2 rounded-xl border border-border bg-surface text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              {projects.map((p) => (
+                <option key={p.slug} value={p.slug}>{p.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Filters */}

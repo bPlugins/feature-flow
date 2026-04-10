@@ -15,7 +15,7 @@ export default async function PublicProjectLayout({
 
   const project = await prisma.project.findUnique({
     where: { slug },
-    select: { name: true, slug: true, primaryColor: true, description: true },
+    select: { name: true, slug: true, primaryColor: true, description: true, logoUrl: true, customCss: true },
   });
 
   if (!project) notFound();
@@ -28,16 +28,23 @@ export default async function PublicProjectLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
+      {project.customCss && (
+        <style dangerouslySetInnerHTML={{ __html: project.customCss }} />
+      )}
       {/* Public header */}
       <header className="border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: project.primaryColor }}
-            >
-              <Zap className="w-4 h-4 text-white" />
-            </div>
+            {project.logoUrl ? (
+              <img src={project.logoUrl} alt={project.name} className="w-8 h-8 rounded-lg object-cover" />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ background: project.primaryColor }}
+              >
+                <Zap className="w-4 h-4 text-white" />
+              </div>
+            )}
             <span className="text-lg font-bold">{project.name}</span>
           </div>
           <div className="flex items-center gap-2">

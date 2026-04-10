@@ -10,9 +10,16 @@ import {
   Code2,
   Check,
   Sparkles,
+  LayoutDashboard
 } from "lucide-react";
+import { auth } from "@/lib/auth";
+import ThemeToggle from "@/components/ThemeToggle";
+import { isSuperAdmin } from "@/lib/superadmin";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await auth();
+  const isSuper = isSuperAdmin(session?.user?.email);
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Navigation */}
@@ -26,22 +33,35 @@ export default function HomePage() {
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
-            <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</a>
+            {!isSuper && <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</a>}
             <a href="#embed" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Embed</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/register"
-              className="text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-primary/25 active:scale-95"
-            >
-              Get Started
-            </Link>
+            <ThemeToggle />
+            {session?.user ? (
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-2 ml-2 text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-primary/25 active:scale-95"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                {session.user.name || "Dashboard"}
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className="text-sm font-semibold bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-primary/25 active:scale-95"
+                >
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -274,8 +294,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="py-24 px-6">
+      {/* Pricing - hidden for super admin */}
+      {!isSuper && <section id="pricing" className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -351,7 +371,7 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* Footer */}
       <footer className="py-12 px-6 border-t border-border">
